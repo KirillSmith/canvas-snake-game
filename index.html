@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Simple snake game demo ( canvas  + Vue.js )</title>
+    <script type="importmap">
+        {
+          "imports": {
+            "vue": "https://unpkg.com/vue@3/dist/vue.esm-browser.js"
+          }
+        }
+    </script>
+    <style>
+        html,
+        body {
+            height: 100%;
+            margin: 0;
+            background: black;
+            color: white;
+        }
+        body {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        #myCanvas {
+            border: solid 1px gray;
+            box-shadow: black 0px 0px 5px;
+            background: rgb(0,28,2);
+            background: radial-gradient(circle, rgba(0,28,2,1) 0%, rgba(0,78,5,1) 100%);
+        }
+        table td, table th  {
+            border: solid 1px white;
+            padding: 10px;
+        }
+        .description {
+            text-align: justify;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+<div id="app">
+    <canvas :id=canvasId :width=fieldSize :height=fieldSize></canvas>
+    <table :style="{ width: fieldSize + 'px' }">
+        <tbody>
+        <tr>
+            <th>Score</th>
+            <td>{{gamePoints}}</td>
+        </tr>
+        <tr>
+            <th>Speed</th>
+            <td>{{gameSpeed}}</td>
+        </tr>
+        <tr>
+            <th>Level</th>
+            <td>{{gameLevel}}</td>
+        </tr>
+        <tr>
+            <th>High score</th>
+            <td>{{highScore}}</td>
+        </tr>
+        </tbody>
+    </table>
+    <div class="description" :style="{ width: fieldSize + 'px' }">
+        Use the arrow keys on your keyboard to change the direction of the snake's movement.
+    </div>
+</div>
+<script type="module">
+    import { createApp } from 'vue'
+    createApp({
+        data() {
+            return {
+                // Skip frames presets
+                speedPresets: {
+                    1: 40,
+                    2: 35,
+                    3: 30,
+                    4: 25,
+                    5: 20,
+                    6: 15,
+                    7: 10,
+                    8: 7,
+                    9: 5
+                },
+                // Default settings and values
+                gameSpeed : 40,
+                gamePoints : 0,
+                gameLevel : 1,
+                fieldSize: 450,
+                gridSize: 40,
+                gridElSize: 0,
+                canvas: null,
+                context: null,
+                frame: 0,
+                snake : null,
+                food : null,
+                highScore: 0,
+                canvasId: 'myCanvas',
+                pointsToLevelUp: 10
+            }
+        },
+        methods: {
+            getRandomPosition: function (min, max) {
+                return [
+                    Math.round(Math.random() * (max - min)) + min,
+                    Math.round(Math.random() * (max - min)) + min
+                ];
+            },
+            resetGame: function() {
+                // Reset game stats
+                this.gamePoints = 0;
+                this.gameSpeed = 1;
+                this.gameLevel = 1;
+                this.snake = {
+
+                    x: Math.round( this.gridElSize * 2 ),
+                    y: Math.round( this.gridElSize * 2 ),
+                    dx: this.gridElSize,
+                    dy: 0,
+                    cells: [],
+                    maxCells: 3
+                };
+                this.food = {
+                    // Начальные координаты яблока
+                    x: Math.round( this.gridElSize * 5 ),
+                    y: Math.round( this.gridElSize * 5 )
+                }
+            },
+            increaseLevel: function () {
+                this.gameLevel++;
+                if ( this.gameSpeed < 9 ) {
+                    this.gameSpeed++;
+                }
+            },
+            createFood: function () {
+                let newPosition = this.getRandomPosition( 0, this.gridSize );
+                this.food.x = Math.round( newPosition[0] * this.gridElSize );
+                this.food.y = Math.round( newPosition[1] * this.gridElSize );
+            },
+            drawExistsFood: function() {
+                this.context.fillStyle = 'red';
+                this.context.fillRect(this.food.x, this.food.y, this.gridElSize - 1, this.gridElSize - 1);
+            },
+            moveSnake: function() {
+                // Двигаем змейку с нужной скоростью
+                this.snake.x += this.snake.dx;
+                this.snake.y += this.snake.dy;
+                // Если змейка достигла края поля по горизонтали — продолжаем её движение с противоположной строны
+                if (this.snake.x < 0) {
+                    this.snake.x = this.fieldSize - this.gridElSize;
+                }
+                else if (this.snake.x >= this.fieldSize) {
+                    this.snake.x = 0;
+                }
+                // Делаем то же самое для движения по вертикали
+                if (this.snake.y < 0) {
+                    this.snake.y = this.fieldSize - this.gridElSize;
+                }
+                else if (this.snake.y >= this.fieldSize ) {
+                    this.snake.y = 0;
+                }
+                // Продолжаем двигаться в выбранном направлении. Голова всегда впереди, поэтому добавляем её координаты в начало массива, который отвечает за всю змейку
+                this.snake.cells.unshift({ x: this.snake.x, y: this.snake.y });
+                // Сразу после этого удаляем последний элемент из массива змейки, потому что она движется и постоянно освобождает клетки после себя
+                if (this.snake.cells.length > this.snake.maxCells) {
+                    this.snake.cells.pop();
+                }
+            },
+            checkSnakeCells: function() {
+                this.context.fillStyle = 'white';
+                this.snake.cells.forEach((cell, index) => {
+                    this.context.fillRect(cell.x, cell.y, this.gridElSize - 1, this.gridElSize - 1);
+                    // If snake got food
+                    if (cell.x === this.food.x && cell.y === this.food.y) {
+                        this.snake.maxCells++;
+                        this.gamePoints++;
+                        // High score
+                        if ( this.highScore < this.gamePoints ) {
+                            this.highScore = this.gamePoints;
+                            localStorage.setItem("highScore", this.highScore );
+                        }
+                        // Increase level and speed
+                        if ( this.gamePoints % this.pointsToLevelUp === 0 ) {
+                            this.increaseLevel();
+                        }
+                        // Generate new food cell
+                        this.createFood();
+                    }
+
+                    // If game over ( has circuit ) - reset the game
+                    for (let i = index + 1; i < this.snake.cells.length; i++) {
+                        if (cell.x === this.snake.cells[i].x && cell.y === this.snake.cells[i].y) {
+                            this.resetGame();
+                        }
+                    }
+                });
+            },
+            loop: function() {
+                // Animation frames ( skip some of them to adjust game speed )
+                requestAnimationFrame(this.loop);
+                if (++this.frame < this.speedPresets[ this.gameSpeed ] ) {
+                    return;
+                }
+                this.frame = 0;
+
+                // Updating canvas context and clearing for new frame
+                this.context = document.getElementById(this.canvasId).getContext('2d');
+                this.context.clearRect( 0, 0, this.fieldSize, this.fieldSize );
+                // Draw food
+                this.drawExistsFood();
+                // Move snake in selected direction
+                this.moveSnake();
+                // Checking snake move result
+                this.checkSnakeCells();
+            }
+        },
+        mounted() {
+            this.gridElSize = Math.round( this.fieldSize / this.gridSize );
+            this.context = document.getElementById(this.canvasId);
+            this.canvas = this.context.getContext('2d');
+
+
+            document.addEventListener('keydown', (e) => {
+                // Стрелка влево
+                if (e.code === "ArrowLeft" && this.snake.dx === 0) {
+                    this.snake.dx = - this.gridElSize;
+                    this.snake.dy = 0;
+                }
+                else if (e.code === "ArrowUp" && this.snake.dy === 0) {
+                    this.snake.dy = -this.gridElSize;
+                    this.snake.dx = 0;
+                }
+                else if (e.code === "ArrowRight" && this.snake.dx === 0) {
+                    this.snake.dx = this.gridElSize;
+                    this.snake.dy = 0;
+                }
+                else if (e.code === "ArrowDown" && this.snake.dy === 0) {
+                    this.snake.dy = this.gridElSize;
+                    this.snake.dx = 0;
+                } else if (e.code === "NumpadAdd") {
+                    if ( this.gameSpeed < 9 ) {
+                        this.gameSpeed++;
+                    }
+                } else if (e.code === "NumpadSubtract") {
+                    if ( this.gameSpeed > 1 ) {
+                        this.gameSpeed--;
+                    }
+                } else {
+                    console.log( e.code )
+                }
+            });
+
+            let hs = localStorage.getItem("highScore");
+            if ( hs !== null ) {
+                this.highScore = hs;
+            }
+
+            this.resetGame()
+            requestAnimationFrame(this.loop);
+        }
+    }).mount('#app')
+</script>
+</body>
+
+</html>
